@@ -14,6 +14,21 @@ cp .env.example .env && set -a && . ./.env && set +a
 go run ./cmd/plimsoll-indexer
 ```
 
+## End-to-end test
+
+`internal/e2e` runs the standalone network preset and the event ingester
+against a local Stellar network (`stellar/quickstart --local` in Docker). It is
+skipped unless `PLIMSOLL_E2E=1`, so `go test ./...` and CI never need Docker:
+
+```bash
+PLIMSOLL_E2E=1 go test ./internal/e2e/ -v -timeout 10m
+```
+
+It needs Docker and port 8000 free, and removes its container afterwards.
+`PLIMSOLL_E2E_IMAGE` overrides the image. The Plimsoll contracts are not
+deployed to that network, so it covers connectivity, the preset defaults and
+the ingest loop, not decoding of contract events.
+
 ## Pull request checklist
 
 - [ ] One change per pull request, linked to its issue.
