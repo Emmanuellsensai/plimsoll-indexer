@@ -104,6 +104,8 @@ that supplies defaults for `STELLAR_RPC_URL`, `HORIZON_URL` and
 `STELLAR_RPC_URL` is required there. `standalone` points at a local
 [stellar/quickstart](https://github.com/stellar/quickstart) on `localhost:8000`.
 
+Running it in production? See the [operations runbook](docs/runbook.md).
+
 ## Docker
 
 Prefer containers? Build a distroless image and run with Compose (Postgres +
