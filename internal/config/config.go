@@ -14,9 +14,35 @@ const (
 	TestnetRPC        = "https://soroban-testnet.stellar.org"
 	TestnetHorizon    = "https://horizon-testnet.stellar.org"
 	TestnetPassphrase = "Test SDF Network ; September 2015"
+
+	MainnetHorizon    = "https://horizon.stellar.org"
+	MainnetPassphrase = "Public Global Stellar Network ; September 2015"
+
+	StandaloneRPC        = "http://localhost:8000/rpc"
+	StandaloneHorizon    = "http://localhost:8000"
+	StandalonePassphrase = "Standalone Network ; February 2017"
 )
 
+// Preset is a named set of network defaults. Each field is only a default:
+// STELLAR_RPC_URL, HORIZON_URL and STELLAR_NETWORK_PASSPHRASE override it.
+type Preset struct {
+	RPCURL     string
+	HorizonURL string
+	Passphrase string
+}
+
+// Presets are selected with the NETWORK variable. Mainnet has no RPC default
+// because SDF does not run a public Soroban RPC for it: STELLAR_RPC_URL must
+// be set to a provider's endpoint.
+var Presets = map[string]Preset{
+	"testnet":    {RPCURL: TestnetRPC, HorizonURL: TestnetHorizon, Passphrase: TestnetPassphrase},
+	"mainnet":    {RPCURL: "", HorizonURL: MainnetHorizon, Passphrase: MainnetPassphrase},
+	"standalone": {RPCURL: StandaloneRPC, HorizonURL: StandaloneHorizon, Passphrase: StandalonePassphrase},
+}
+
 type Config struct {
+	// Network is the preset name the defaults below came from.
+	Network     string
 	DatabaseURL string
 	Port        string
 	RPCURL      string
@@ -49,13 +75,22 @@ type Config struct {
 
 // Load reads the environment. Missing required values are reported together.
 func Load() (Config, error) {
+	var errs []error
+	network := strings.ToLower(envOr("NETWORK", "testnet"))
+	preset, ok := Presets[network]
+	if !ok {
+		errs = append(errs, fmt.Errorf("NETWORK %q is not one of testnet, mainnet, standalone", network))
+		preset = Presets["testnet"]
+	}
+
 	c := Config{
+		Network:            network,
 		DatabaseURL:        os.Getenv("DATABASE_URL"),
 		Port:               envOr("PORT", "8080"),
-		RPCURL:             envOr("STELLAR_RPC_URL", TestnetRPC),
-		HorizonURL:         strings.TrimRight(envOr("HORIZON_URL", TestnetHorizon), "/"),
+		RPCURL:             envOr("STELLAR_RPC_URL", preset.RPCURL),
+		HorizonURL:         strings.TrimRight(envOr("HORIZON_URL", preset.HorizonURL), "/"),
 		HorizonCheckURL:    strings.TrimRight(os.Getenv("HORIZON_CHECK_URL"), "/"),
-		NetworkPassphrase:  envOr("STELLAR_NETWORK_PASSPHRASE", TestnetPassphrase),
+		NetworkPassphrase:  envOr("STELLAR_NETWORK_PASSPHRASE", preset.Passphrase),
 		CoverageLedgerID:   os.Getenv("COVERAGE_LEDGER_ID"),
 		ReporterRegistryID: os.Getenv("REPORTER_REGISTRY_ID"),
 		PosterSecret:       os.Getenv("SUPPLY_POSTER_SECRET"),
@@ -63,7 +98,9 @@ func Load() (Config, error) {
 		KeepAwakeURL:       keepAwakeURL(os.Getenv("KEEP_AWAKE_URL"), os.Getenv("RENDER_EXTERNAL_URL")),
 	}
 
-	var errs []error
+	if c.RPCURL == "" {
+		errs = append(errs, fmt.Errorf("STELLAR_RPC_URL is required for NETWORK=%s", network))
+	}
 	if c.DatabaseURL == "" {
 		errs = append(errs, errors.New("DATABASE_URL is required"))
 	}

@@ -97,6 +97,13 @@ go test ./...
 Every variable is documented in [.env.example](.env.example). Required:
 `DATABASE_URL`, `COVERAGE_LEDGER_ID`, `REPORTER_REGISTRY_ID`.
 
+`NETWORK` selects a preset (`testnet`, the default, `mainnet` or `standalone`)
+that supplies defaults for `STELLAR_RPC_URL`, `HORIZON_URL` and
+`STELLAR_NETWORK_PASSPHRASE`. Setting any of those three overrides the preset.
+`mainnet` has no default RPC (SDF runs no public Soroban RPC for it), so
+`STELLAR_RPC_URL` is required there. `standalone` points at a local
+[stellar/quickstart](https://github.com/stellar/quickstart) on `localhost:8000`.
+
 ## Docker
 
 Prefer containers? Build a distroless image and run with Compose (Postgres +
