@@ -187,3 +187,77 @@ func TestDecodeIgnoresUnknownEvents(t *testing.T) {
 		t.Fatalf("got %v, %v", got, err)
 	}
 }
+
+// FuzzAsI128 checks the i128 encoding round-trips for every in-range value
+// and that anything out of range is refused rather than truncated.
+func FuzzAsI128(f *testing.F) {
+	f.Add(uint64(0), uint64(0))
+	f.Add(uint64(0), ^uint64(0))
+	f.Add(uint64(1)<<62, uint64(12345))
+	f.Add(^uint64(0)>>1, ^uint64(0))
+	f.Add(^uint64(0), uint64(0))
+	f.Fuzz(func(t *testing.T, hi, lo uint64) {
+		n := new(big.Int).Lsh(new(big.Int).SetUint64(hi), 64)
+		n.Or(n, new(big.Int).SetUint64(lo))
+		v, err := I128Val(n)
+		if n.BitLen() > 127 {
+			if err == nil {
+				t.Fatalf("I128Val accepted out-of-range %s", n)
+			}
+			return
+		}
+		if err != nil {
+			t.Fatalf("I128Val(%s): %v", n, err)
+		}
+		back, err := AsI128(v)
+		if err != nil || back.Cmp(n) != 0 {
+			t.Fatalf("%s -> %v (%v)", n, back, err)
+		}
+	})
+}
+
+// FuzzDecode feeds arbitrary base64 topics and values to Decode. It must never
+// panic, and a nil error with a supply or reserve event must carry an amount.
+func FuzzDecode(f *testing.F) {
+	addr, _ := AddressVal(cAddr)
+	issuer, _ := AddressVal(gAddr)
+	amt, _ := I128Val(big.NewInt(3505136135138075))
+	hash, _ := BytesN32Val(strings.Repeat("ab", 32))
+	u32 := U32Val(7)
+	enc := func(v xdr.ScVal) string {
+		s, err := xdr.MarshalBase64(v)
+		if err != nil {
+			f.Fatal(err)
+		}
+		return s
+	}
+	f.Add(enc(sym("asset_listed")), enc(addr), "", enc(mapVal("code", str("PUSD"), "issuer", issuer)))
+	f.Add(enc(sym("supply_posted")), enc(addr), "", enc(mapVal("amount", amt, "ledger", u32, "breakdown_hash", hash, "poster", issuer)))
+	f.Add(enc(sym("reserve_posted")), enc(addr), enc(u32), enc(mapVal("amount", amt, "as_of", u64(1700000000), "reporter", issuer, "doc_hash", hash, "doc_uri", str("https://x"))))
+	f.Add(enc(sym("reporter_set")), enc(issuer), "", enc(mapVal("role", u32, "name", str("n"))))
+	f.Add(enc(sym("reporter_revoked")), enc(issuer), "", "")
+	f.Add("", "", "", "")
+	f.Add("not base64!", "AAAA", "AAAA", "AAAA")
+	f.Fuzz(func(t *testing.T, t0, t1, t2, value string) {
+		var topics []string
+		for _, s := range []string{t0, t1, t2} {
+			if s != "" {
+				topics = append(topics, s)
+			}
+		}
+		got, err := Decode(protocol.EventInfo{ID: "fuzz", TopicXDR: topics, ValueXDR: value, LedgerClosedAt: "2025-01-01T00:00:00Z"})
+		if err != nil {
+			return
+		}
+		switch e := got.(type) {
+		case SupplyPosted:
+			if e.Amount == nil {
+				t.Fatal("SupplyPosted without amount")
+			}
+		case ReservePosted:
+			if e.Amount == nil {
+				t.Fatal("ReservePosted without amount")
+			}
+		}
+	})
+}
